@@ -15,9 +15,15 @@ Config keys this provider responds to::
       search_backend: "searxng"     # explicit per-capability
       backend: "searxng"            # shared fallback
 
-Env var::
+Env vars::
 
-    SEARXNG_URL=http://localhost:8080
+    SEARXNG_URL=https://searxng.niqera.com
+    SEARXNG_ACCESS_CLIENT_ID=<your-cf-access-client-id>
+    SEARXNG_ACCESS_CLIENT_SECRET=<your-cf-access-client-secret>
+
+When ``SEARXNG_ACCESS_CLIENT_ID`` and ``SEARXNG_ACCESS_CLIENT_SECRET``
+are set, they are sent as ``CF-Access-Client-Id`` and ``CF-Access-Client-Secret``
+headers respectively (for Cloudflare Access-protected instances).
 """
 
 from __future__ import annotations
@@ -79,12 +85,19 @@ class SearXNGWebSearchProvider(WebSearchProvider):
             "pageno": 1,
         }
 
+        headers = {"Accept": "application/json"}
+        cf_id = os.getenv("SEARXNG_ACCESS_CLIENT_ID", "").strip()
+        cf_secret = os.getenv("SEARXNG_ACCESS_CLIENT_SECRET", "").strip()
+        if cf_id and cf_secret:
+            headers["CF-Access-Client-Id"] = cf_id
+            headers["CF-Access-Client-Secret"] = cf_secret
+
         try:
             resp = httpx.get(
                 f"{base_url}/search",
                 params=params,
                 timeout=15,
-                headers={"Accept": "application/json"},
+                headers=headers,
             )
             resp.raise_for_status()
         except httpx.HTTPStatusError as exc:
@@ -146,8 +159,16 @@ class SearXNGWebSearchProvider(WebSearchProvider):
             "env_vars": [
                 {
                     "key": "SEARXNG_URL",
-                    "prompt": "SearXNG instance URL (e.g. http://localhost:8080)",
+                    "prompt": "SearXNG instance URL (e.g. https://searxng.niqera.com)",
                     "url": "https://searx.space/",
+                },
+                {
+                    "key": "SEARXNG_ACCESS_CLIENT_ID",
+                    "prompt": "Cloudflare Access Client ID (for CF-protected instances)",
+                },
+                {
+                    "key": "SEARXNG_ACCESS_CLIENT_SECRET",
+                    "prompt": "Cloudflare Access Client Secret",
                 },
             ],
         }
