@@ -88,14 +88,30 @@ def test_request_yield_reason_roundtrip_and_clear():
     interrupt_mod.consume_yield(tid)
 
 
+def _wait_for(path, deadline_s):
+    """Block until *path* exists: the command signals it is really running. A fixed sleep races
+    shell cold-start (Git Bash on a Windows runner can take seconds), and detaching before the
+    shell printed anything makes the output assertion flaky."""
+    end = time.monotonic() + deadline_s
+    while time.monotonic() < end:
+        if path.exists():
+            return True
+        time.sleep(0.05)
+    return False
+
+
 @pytest.mark.live_system_guard_bypass
 def test_detach_moves_command_to_background_and_outlives_foreground_timeout(tmp_path, monkeypatch):
     """Detach mid-command: no steer, detach note, process alive AFTER the foreground timeout
     would have fired (the promoted process must not inherit it)."""
     monkeypatch.setenv("HERMES_HOME", str(tmp_path))
     agent = _Agent()
-    t, res = _run_in_worker(agent, "echo started; sleep 6; echo done", timeout=3)
-    time.sleep(1.0)
+    ready = tmp_path / "ready"
+    fg_timeout = 10
+    t0 = time.monotonic()
+    t, res = _run_in_worker(
+        agent, f"echo started; touch '{ready.as_posix()}'; sleep 14; echo done", timeout=fg_timeout)
+    assert _wait_for(ready, fg_timeout - 1), "command never started within the foreground timeout"
     assert agent.detach_foreground() == 1
     assert agent._pending_steer is None  # detach carries no user message
 
@@ -109,10 +125,11 @@ def test_detach_moves_command_to_background_and_outlives_foreground_timeout(tmp_
         assert "started" in r["output"]
         assert not interrupt_mod.is_thread_yield_requested(t.ident)
         assert interrupt_mod.pop_yield_reason(t.ident) is None  # consumed by the tool
-        time.sleep(3.5)  # past the 3s foreground timeout
+        # Past the foreground timeout (measured from launch): the promoted process must survive it.
+        time.sleep(max(0.0, fg_timeout + 0.5 - (time.monotonic() - t0)))
         assert psutil.pid_exists(r["pid"]), "promoted process was killed by the foreground timeout"
         assert process_registry.poll(r["session_id"])["status"] == "running"
-        waited = process_registry.wait(r["session_id"], timeout=10)
+        waited = process_registry.wait(r["session_id"], timeout=30)
         assert "done" in json.dumps(waited)
     finally:
         if process_registry.poll(r["session_id"])["status"] == "running":
