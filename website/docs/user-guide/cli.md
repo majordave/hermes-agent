@@ -387,6 +387,17 @@ Most terminals send the same byte sequence for `Enter` and `Shift+Enter` by defa
 
 Where the terminal cannot distinguish them, `Alt+Enter` and `Ctrl+J` continue to work by default. **On Windows Terminal specifically, `Alt+Enter` is captured by the terminal (toggles fullscreen) and never reaches Hermes — use `Ctrl+Enter` (delivered as `Ctrl+J`) or `Ctrl+J` directly for a newline.**
 
+### Detach key compatibility
+
+`Ctrl+]` (detach, see [Redirecting the Agent Mid-Turn](#redirecting-the-agent-mid-turn)) reaches Hermes as the single byte `0x1d` in native terminals. Terminals built on xterm.js translate `Ctrl+<punctuation>` by the key's **US-layout position** instead of the character your layout produces, so on non-US layouts it may never arrive.
+
+| Terminal | Status |
+|---|---|
+| Windows Terminal, Warp, tmux | `Ctrl+]` delivered |
+| VS Code terminal (non-US layouts) | Not delivered — `/detach` always works; or set `display.background_key`, or add a VS Code keybinding that sends it: `{"key": "ctrl+]", "command": "workbench.action.terminal.sendSequence", "args": {"text": "\u001d"}, "when": "terminalFocus"}` |
+
+To check what your terminal sends for any key, run `python scripts/keystroke_diagnostic.py`.
+
 ## Redirecting the Agent Mid-Turn
 
 While the agent is working, you can send a correction without starting a new turn:
