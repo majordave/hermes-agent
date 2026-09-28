@@ -2,10 +2,10 @@
 foreground terminal command to the background with no message. Reuses the yield path of
 ``redirect()`` but must not inject a steer, and must tell the model why it was moved."""
 import json
-import os
 import threading
 import time
 
+import psutil
 import pytest
 
 from agent.interrupt_control import InterruptControlMixin
@@ -110,7 +110,7 @@ def test_detach_moves_command_to_background_and_outlives_foreground_timeout(tmp_
         assert not interrupt_mod.is_thread_yield_requested(t.ident)
         assert interrupt_mod.pop_yield_reason(t.ident) is None  # consumed by the tool
         time.sleep(3.5)  # past the 3s foreground timeout
-        assert os.path.exists(f"/proc/{r['pid']}"), "promoted process was killed by the foreground timeout"
+        assert psutil.pid_exists(r["pid"]), "promoted process was killed by the foreground timeout"
         assert process_registry.poll(r["session_id"])["status"] == "running"
         waited = process_registry.wait(r["session_id"], timeout=10)
         assert "done" in json.dumps(waited)

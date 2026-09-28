@@ -68,7 +68,7 @@ def test_redirect_mid_command_yields_it_to_background_without_killing_it(tmp_pat
         assert r["exit_code"] is None and "started" in r["output"]
         assert r["notify_on_complete"] is True
         # The process is alive and tracked: poll/wait/kill and the completion notification work.
-        assert os.path.exists(f"/proc/{r['pid']}")
+        assert psutil.pid_exists(r["pid"])
         assert process_registry.poll(r["session_id"])["status"] == "running"
         assert not interrupt_mod.is_thread_yield_requested(t.ident)
         descendants = psutil.Process(r["pid"]).children(recursive=True)
