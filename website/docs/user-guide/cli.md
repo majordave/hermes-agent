@@ -206,6 +206,7 @@ On macOS, `F6`/`F7` mean the physical function keys, not the media/system contro
 | `Ctrl+R` / `F7` | Toggle the live work dock between its multi-row preview and a single summary line without moving composer focus. `Ctrl+R` is the reliable fallback when macOS reserves the function-key row. Besides subagents and background processes, the dock shows a standing `/goal` (active, parked or paused, with turns used) on its top row and the prompts waiting in `/queue` on its bottom rows. |
 | `Ctrl+D` | Exit |
 | `Ctrl+Z` | Suspend Hermes to background (Unix only). Run `fg` in the shell to resume. |
+| `Ctrl+]` | **Detach** the running foreground terminal command: it keeps running as a tracked background process (notify on completion) and the agent continues. Same as `/detach`. Configurable via `display.background_key`; only active while a turn runs. |
 | `Tab` | Accept auto-suggestion (ghost text) or autocomplete slash commands |
 | `!<command>` | **Shell mode** — run a shell command yourself without spending a model turn (e.g. `!git status`, `!pytest -x`). See below. |
 

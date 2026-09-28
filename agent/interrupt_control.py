@@ -317,6 +317,24 @@ class InterruptControlMixin:
         _ic_abort_active_request(self, "redirect_abort", "Failed to abort request for redirect")
         return True
 
+    def detach_foreground(self) -> int:
+        """Send the running foreground terminal command(s) to the background WITHOUT a message
+        and without killing them (the explicit detach key / ``/detach``). Reuses the yield path of
+        ``redirect()``: each tool worker is asked to yield with reason ``"user_detach"`` so the
+        terminal tool returns ``yielded_to_background`` with a detach-specific note. Returns the
+        number of workers signalled (0 when no tool is executing — nothing to detach)."""
+        if not getattr(self, "_executing_tools", False):
+            return 0
+        tracker = getattr(self, "_tool_worker_threads", None)
+        tracker_lock = getattr(self, "_tool_worker_threads_lock", None)
+        if tracker is None or tracker_lock is None:
+            return 0
+        with tracker_lock:
+            worker_tids = list(tracker)
+        for tid in worker_tids:
+            _request_yield(tid, reason="user_detach")
+        return len(worker_tids)
+
     def _has_pending_redirect(self) -> bool:
         """Return whether an active-turn redirect is waiting to be applied."""
         with _ic_lock(self, "_pending_redirect_lock"):

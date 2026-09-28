@@ -854,7 +854,8 @@ from tools.terminal_tool_guards import (
     _foreground_background_guidance, _safe_command_preview, _validate_workdir,
     gateway_lifecycle_block, self_repo_block,
 )
-from tools.terminal_tool_background import _YIELDED_NOTE, spawn_background_process, yield_to_background_handler
+from tools.terminal_tool_background import (
+    _DETACHED_NOTE, _YIELDED_NOTE, spawn_background_process, yield_to_background_handler)
 from tools.terminal_tool_result import finalize_foreground_result
 
 
@@ -1283,10 +1284,14 @@ def _run_foreground(
             return _error_json(_redact_terminal_error_text(f"Command execution failed: {type(e).__name__}: {e}"))
 
     if result.get("yielded_session_id"):
+        from tools.interrupt import pop_yield_reason
+        detached = pop_yield_reason(threading.current_thread().ident) == "user_detach"
         return json.dumps({
             "output": result.get("output", ""), "exit_code": None, "error": None,
             "status": "yielded_to_background", "session_id": result["yielded_session_id"],
-            "pid": result.get("pid"), "notify_on_complete": True, "note": _YIELDED_NOTE,
+            "pid": result.get("pid"), "notify_on_complete": True,
+            **({"detached_by_user": True} if detached else {}),
+            "note": _DETACHED_NOTE if detached else _YIELDED_NOTE,
         }, ensure_ascii=False)
     return finalize_foreground_result(
         command=command, result=result, env=env, env_type=env_type, effective_task_id=eff,

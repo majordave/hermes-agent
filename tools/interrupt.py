@@ -25,6 +25,9 @@ _interrupt_reasons: dict[int, str] = {}
 # Threads asked to YIELD: hand a long-running foreground command to the background
 # instead of killing it, so a mid-turn user message is not parked behind it.
 _yield_threads: set[int] = set()
+# Why a yield was requested (e.g. ``"user_detach"`` for the explicit detach key / ``/detach``);
+# absent = the historical mid-turn-message redirect. Read by the terminal tool to pick its note.
+_yield_reasons: dict[int, str] = {}
 _lock = threading.Lock()
 # Tool-worker tid a deadline worker acts for. ``run_bounded_sync`` runs its worker under
 # ``contextvars.copy_context()``, so a guard chain moved onto that worker still honours
@@ -46,6 +49,8 @@ def set_interrupt(active: bool, thread_id: int | None = None, *, reason: str | N
             _interrupt_reasons.pop(tid, None)
         if not active:
             _yield_threads.discard(tid)
+            if tid is not None:
+                _yield_reasons.pop(tid, None)
         _snapshot = set(_interrupted_threads) if _DEBUG_INTERRUPT else None
     if _DEBUG_INTERRUPT:
         logger.info(
@@ -71,13 +76,26 @@ def is_thread_interrupted(thread_id: int | None) -> bool:
         return thread_id in _interrupted_threads
 
 
-def request_yield(thread_id: int) -> None:
+def request_yield(thread_id: int, reason: str | None = None) -> None:
     """Ask the tool running on *thread_id* to yield: a foreground terminal command hands
     its live process to the background registry and returns at once, so a user's mid-turn
     message (``redirect()`` during tool execution) is delivered instead of parked behind it.
-    The command itself is never killed; that is what ``set_interrupt`` is for."""
+    The command itself is never killed; that is what ``set_interrupt`` is for. ``reason``
+    (e.g. ``"user_detach"``) lets the tool tell the model why it was moved."""
     with _lock:
         _yield_threads.add(thread_id)
+        if reason:
+            _yield_reasons[thread_id] = reason
+        else:
+            _yield_reasons.pop(thread_id, None)
+
+
+def pop_yield_reason(thread_id: int | None) -> str | None:
+    """Take the reason recorded with the last yield request for *thread_id* (``None`` if none)."""
+    if thread_id is None:
+        return None
+    with _lock:
+        return _yield_reasons.pop(thread_id, None)
 
 
 def is_thread_yield_requested(thread_id: int | None) -> bool:
