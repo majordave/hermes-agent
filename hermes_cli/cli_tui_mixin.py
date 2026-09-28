@@ -2054,8 +2054,10 @@ class CLITuiMixin:
         kb.add(*self._tui_voice_record_key_sequence())(self._tui_handle_voice_record)
         _detach_seq = self._tui_background_key_sequence()
         if _detach_seq:
-            # Only while a turn runs: outside it the key keeps its readline meaning.
-            kb.add(*_detach_seq, filter=Condition(lambda: bool(self._agent_running)))(
+            # Only while a turn runs: outside it the key keeps its readline meaning. eager: emacs mode
+            # also binds the 2-key ``c-] <char>`` (character-search), which would otherwise make
+            # prompt_toolkit wait ``timeoutlen`` for a second key before firing the detach.
+            kb.add(*_detach_seq, filter=Condition(lambda: bool(self._agent_running)), eager=True)(
                 self._tui_handle_detach_key)
         kb.add(Keys.BracketedPaste, eager=True)(self._tui_handle_paste)
         kb.add('c-v')(self._tui_handle_ctrl_v)
@@ -2215,7 +2217,8 @@ class CLITuiMixin:
         if n:
             _cprint(f"  {_ACCENT}⇥ Detaching foreground command to background (still running)…{_RST}")
         else:
-            _cprint(f"  {_DIM}No foreground command to detach (the model is thinking, not running a tool).{_RST}")
+            _cprint(f"  {_DIM}Nothing to detach: no foreground terminal command is running on a "
+                    f"local backend (the model may be thinking, or the backend is docker/ssh/remote).{_RST}")
         return n
 
     def _tui_voice_record_key_sequence(self) -> tuple:

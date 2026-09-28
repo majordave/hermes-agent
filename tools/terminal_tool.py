@@ -25,6 +25,7 @@ import sys
 import time
 import threading
 import atexit
+import contextlib
 from dataclasses import dataclass
 from typing import Optional, Dict, Any, List
 
@@ -1263,11 +1264,14 @@ def _run_foreground(
             # bounded_capture: model-facing output keeps a head/tail window
             # while streaming so a verbose command can't OOM the gateway;
             # internal env.execute() consumers stay unbounded.
-            result = env.execute(
-                command, timeout=effective_timeout, cwd=command_cwd, bounded_capture=True,
-                **_yield_kwargs(command, env_type=env_type, cwd=command_cwd, effective_task_id=eff,
-                                task_id=task_id, session_key=session_key),
-            )
+            _yk = _yield_kwargs(command, env_type=env_type, cwd=command_cwd, effective_task_id=eff,
+                                task_id=task_id, session_key=session_key)
+            from tools.interrupt import yield_armed
+            # Only a wait that can actually yield is advertised as detachable (local backend).
+            with (yield_armed() if _yk else contextlib.nullcontext()):
+                result = env.execute(
+                    command, timeout=effective_timeout, cwd=command_cwd, bounded_capture=True, **_yk,
+                )
             break
         except Exception as e:
             if "timeout" in str(e).lower():

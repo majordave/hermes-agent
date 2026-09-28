@@ -50,6 +50,31 @@ def test_detach_foreground_without_tools_is_a_noop():
     assert agent.detach_foreground() == 0
 
 
+def test_detach_skips_workers_not_in_a_yieldable_wait():
+    """A tool worker that is not blocked in a local foreground terminal wait (a non-terminal tool,
+    or a remote backend where no yield_handler is armed) must not be signalled: nothing would
+    consume the bit and the UI must be able to say 'nothing to detach'."""
+    agent = _Agent()
+    tid = 424242
+    agent._tool_worker_threads.add(tid)
+    assert agent.detach_foreground() == 0
+    assert not interrupt_mod.is_thread_yield_requested(tid)
+    with interrupt_mod.yield_armed(tid):
+        assert agent.detach_foreground() == 1
+    assert interrupt_mod.consume_yield(tid)
+    assert interrupt_mod.pop_yield_reason(tid) == "user_detach"
+    assert not interrupt_mod.is_yield_armed(tid)
+
+
+def test_remote_backend_is_never_armed(monkeypatch):
+    """Only the local backend builds a yield handler; others run the wait unarmed."""
+    from tools.terminal_tool_background import yield_to_background_handler
+    for env_type in ("docker", "ssh", "modal", "singularity", "daytona"):
+        assert yield_to_background_handler(
+            command="sleep 1", env_type=env_type, cwd="/", effective_task_id="t", task_id="t",
+            session_key="") is None, env_type
+
+
 def test_request_yield_reason_roundtrip_and_clear():
     tid = 987654321
     interrupt_mod.request_yield(tid, reason="user_detach")
